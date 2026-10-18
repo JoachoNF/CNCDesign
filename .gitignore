@@ -1,0 +1,13 @@
+# Dependencias y artefactos de compilación
+node_modules/
+dist/
+release/
+*.tsbuildinfo
+
+# Variables de entorno (nunca commitear claves)
+.env
+.env.local
+
+# Logs y ficheros de sistema
+*.log
+.DS_Store
