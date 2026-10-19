@@ -1,3 +1,15 @@
+/**
+ * base.ts — Interfaz común de los proveedores de IA
+ *
+ * Define el contrato que implementan Anthropic, OpenAI y Ollama:
+ *   · `OpcionesIA`  — parámetros de una generación (clave, modelo, temperatura…)
+ *   · `RespuestaIA` — resultado normalizado (texto, modelo usado, costo)
+ *   · `ProveedorIA` — clase abstracta con `generar()` y `disponible()`
+ *
+ * El router (src/ai/router.ts) trabaja contra esta interfaz, no contra las
+ * implementaciones concretas, de modo que añadir un proveedor nuevo no
+ * requiere tocar la lógica de enrutamiento.
+ */
 export interface OpcionesIA {
   apiKey?: string
   modelo?: string
