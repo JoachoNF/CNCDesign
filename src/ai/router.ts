@@ -76,7 +76,7 @@ export class CADRouter {
 
     if (await proveedor.disponible()) {
       try {
-        const resultado = await this.ejecutarConProveedor(proveedor, prompt, modeloActual, opciones)
+        const resultado = await this.ejecutarConProveedor(proveedor, prompt, modeloActual, tareaDetectada, opciones)
         return {
           ...resultado,
           tareaDetectada,
@@ -87,7 +87,7 @@ export class CADRouter {
         // 2. Fallback a Ollama si está disponible
         if (proveedor.nombre !== 'ollama' && (await this.ollama.disponible())) {
           console.log('[Router] Usando fallback Ollama')
-          const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, opciones)
+          const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, tareaDetectada, opciones)
           return { ...resultado, tareaDetectada, proveedorUsado: 'ollama' }
         }
         return {
@@ -102,7 +102,7 @@ export class CADRouter {
     // 3. Ningún proveedor de pago disponible → Ollama local
     if (proveedor.nombre !== 'ollama' && (await this.ollama.disponible())) {
       console.log('[Router] Solo Ollama disponible, usando local')
-      const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, opciones)
+      const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, tareaDetectada, opciones)
       return { ...resultado, tareaDetectada, proveedorUsado: 'ollama' }
     }
 
@@ -183,8 +183,23 @@ FORMATO DE RESPUESTA:
 - Texto breve posterior con advertencias de manufacturabilidad (opcional).`
 
     const especifico: Record<TipoTarea, string> = {
-      crear: '\nTAREA: Crear una pieza nueva desde cero. Genera el contorno y características solicitadas.',
-      editar: '\nTAREA: Editar un modelo existente. Respetar la geometría original y aplicar solo los cambios solicitados.',
+      crear: `
+TAREA: Crear una pieza nueva desde cero. Genera el contorno y características solicitadas.
+
+REGLAS DE PRECISIÓN (especialmente para placas 2D):
+- Las medidas indicadas por el usuario son EXACTAS y se expresan en milímetros. Deben respetarse fielmente, sin redondear.
+- Si se pide una placa de L x A, el contorno debe medir exactamente L x A en milímetros.
+- Los radios de esquina redondeada y los agujeros se calculan sobre las medidas exactas proporcionadas.
+- No inventes ni infles dimensiones. Si faltan datos de fabricación (grosor, acabado), usa valores estándar y respáldalos en el texto.`,
+      editar: `
+TAREA: Editar un modelo existente. Respetar la geometría original y aplicar solo los cambios solicitados.
+
+REGLAS DE EDICIÓN (CRÍTICAS):
+- Recibirás el DXF completo del modelo actual en el prompt del usuario.
+- DEBES responder con el DXF COMPLETO modificado: conserva TODAS las entidades, capas, bloques y valores originales, y solo cambia lo pedido.
+- No generes fragmentos: el bloque debe incluir las secciones HEADER, TABLES y ENTITIES completas más EOF.
+- Aplica ÚNICAMENTE los cambios solicitados. No re-diseñes lo que no se pidió.
+- Al cambiar una medida, recalcula agujeros, radios y demás entidades afectadas sobre las nuevas coordenadas exactas.`,
       imagen: "\nTAREA: Crear modelo a partir de una imagen/dibujo. Asume dimensiones razonables y avisa que son estimadas.",
       corregir: "\nTAREA: Corregir errores en un modelo DXF previo. Revisa geometría, capas y válidez del archivo.",
       desconocido: '\nTAREA: Tarea no especificada. Asume creación de una pieza simple y pide aclaración si es necesario.',
@@ -196,10 +211,10 @@ FORMATO DE RESPUESTA:
   private async ejecutarConProveedor(
     proveedor: AnthropicProvider | OpenAIProvider | OllamaProvider,
     prompt: string,
-    modeloActual?: string,
+    modeloActual: string | undefined,
+    tarea: TipoTarea,
     opciones: { ollamaModelo?: string } = {}
   ): Promise<Pick<RespuestaRouter, 'ok' | 'dxf' | 'errores' | 'modeloIA'>> {
-    const tarea = this.clasificarTarea(prompt)
     const systemPrompt = this.buildSystemPrompt(tarea)
     const promptCompleto = this.buildUserPrompt(prompt, modeloActual, tarea)
 
@@ -233,11 +248,29 @@ FORMATO DE RESPUESTA:
   }
 
   private buildUserPrompt(prompt: string, modeloActual?: string, tarea: TipoTarea = 'crear'): string {
-    const contexto = modeloActual
-      ? `\n\nMODELO ACTUAL (texto DXF):\n${modeloActual.slice(0, 3000)}...`
-      : ''
+    const partes: string[] = []
 
-    return `${prompt}${contexto}\n\nGenera ahora el archivo .dxf correspondiente.`
+    // Contexto completo del modelo actual. Para modificaciones se incluye TODO el
+    // DXF (sin truncar) para que la IA tenga el contexto completo y aplique los cambios
+    // con exactitud sobre la geometría real.
+    if (modeloActual) {
+      partes.push(
+        [
+          'MODELO ACTUAL — DXF COMPLETO (conservar salvo lo que la instrucción indique cambiar):',
+          '<<<INICIO DXF>>>',
+          modeloActual,
+          '<<<FIN DXF>>>',
+        ].join('\n')
+      )
+    }
+
+    partes.push(`INSTRUCCIÓN DEL USUARIO:\n${prompt}`)
+
+    if (tarea === 'editar') {
+      partes.push('TAREA: MODIFICACIÓN — generar el DXF completo con los cambios aplicados al modelo actual.')
+    }
+
+    return [...partes, 'Genera ahora el archivo .dxf correspondiente.'].join('\n\n')
   }
 
   /**

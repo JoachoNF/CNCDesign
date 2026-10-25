@@ -24,6 +24,12 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       external: (id) => /three\/addons\//.test(id),
+      output: {
+        // Code-splitting: separar three.js del bundle principal para reducir el inicial y mejorar cacheo
+        manualChunks: {
+          three: ['three'],
+        },
+      },
     },
   },
   server: {

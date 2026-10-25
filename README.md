@@ -213,7 +213,7 @@ Al guardar desde el modal, los proveedores se recargan en caliente (`recargarPro
 | `OPENAI_API_KEY` | Clave de OpenAI (GPT) | *(vacío → proveedor no disponible)* |
 | `OLLAMA_URL` | URL del servidor Ollama | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Modelo Ollama por defecto | `qwen2.5-coder:7b` |
-| `NODE_ENV` | `development` activa DevTools y los hooks de desarrollo | — |
+| `NODE_ENV` | `development` activa los hooks de desarrollo (los DevTools ya no se abren automáticamente) | — |
 
 ### Enrutamiento por tarea
 

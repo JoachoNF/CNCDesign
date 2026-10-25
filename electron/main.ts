@@ -12,7 +12,7 @@
  *   · Utilidad de captura automatizada de UI (CAPTURA_UI y familia) para
  *     verificación visual en entornos headless.
  */
-import { app, BrowserWindow, ipcMain, dialog, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, nativeTheme, screen } from 'electron'
 import path from 'path'
 import * as fs from 'fs/promises'
 
@@ -98,9 +98,15 @@ async function cargarPagina(window: BrowserWindow) {
 }
 
 function createWindow() {
+  // Ajustar el tamaño de la ventana al área de trabajo de la pantalla principal
+  const display = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
+  const windowWidth = Math.floor(screenWidth * 0.92)
+  const windowHeight = Math.floor(screenHeight * 0.92)
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: windowWidth,
+    height: windowHeight,
     minWidth: 1000,
     minHeight: 700,
     backgroundColor: '#0a0a0d',
@@ -112,10 +118,8 @@ function createWindow() {
     show: false,
   })
 
-  // Abrir DevTools solo en dev
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools()
-  }
+  // No abrir DevTools automáticamente: la app arranca con la pantalla principal.
+  // (Si se necesita, se puede abrir con F12 o desde el menú de desarrollador.)
 
   cargarPagina(mainWindow)
 

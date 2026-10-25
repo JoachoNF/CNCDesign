@@ -49,6 +49,13 @@ export function Viewer3D() {
   const [ayudaVisible, setAyudaVisible] = useState(false)
   const [nombreVista, setNombreVista] = useState('Isométrica')
 
+  // Ref espejo del DXF actual + loader registrado por el effect de montaje.
+  // Permiten recargar la geometría SIN re-crear el renderer/cámara (optimización de render).
+  const dxfRef = useRef<string | undefined>(undefined)
+  const cargarModeloRef = useRef<(() => void) | null>(null)
+  dxfRef.current = modeloActual?.dxfTexto
+
+  // Montaje único del renderer: se reutiliza para todos los cambios de DXF posteriores
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -85,9 +92,9 @@ export function Viewer3D() {
       camera.position.set(100, 100, 100)
       camera.lookAt(0, 0, 0)
 
-      renderer = new THREE.WebGLRenderer({ antialias: true })
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
       renderer.setSize(container.clientWidth, container.clientHeight)
-      renderer.setPixelRatio(window.devicePixelRatio)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.setClearColor(COLOR_FONDO, 1)
       container.appendChild(renderer.domElement)
 
@@ -164,10 +171,11 @@ export function Viewer3D() {
       }
 
       async function cargarModelo() {
-        if (!modeloActual?.dxfTexto) return
+        const dxfTexto = dxfRef.current
+        if (!dxfTexto) return
         try {
           await loadDefaultFont()
-          const dxf = parseDxf(modeloActual.dxfTexto)
+          const dxf = parseDxf(dxfTexto)
           const { group } = await createThreeObjectsFromDXF(dxf, { darkTheme: true })
 
           if (groupActual) scene.remove(groupActual)
@@ -261,6 +269,7 @@ export function Viewer3D() {
 
       render()
       void cargarModelo()
+      cargarModeloRef.current = cargarModelo
       observador = new ResizeObserver(ajustarTamano)
       observador.observe(container)
       window.addEventListener('resize', ajustarTamano)
@@ -286,11 +295,18 @@ export function Viewer3D() {
           container.removeChild(renderer.domElement)
         }
         renderer?.dispose()
+        renderer?.forceContextLoss()
+        cargarModeloRef.current = null
       }
     } catch (errorWebGL) {
       console.error('Error inicializando WebGL:', errorWebGL)
       setError('No se pudo inicializar el visor 3D (WebGL no disponible en este entorno).')
     }
+  }, [])
+
+  // Recarga la geometría solo cuando cambia el DXF (sin re-crear el renderer ni la cámara)
+  useEffect(() => {
+    if (dxfRef.current) void cargarModeloRef.current?.()
   }, [modeloActual?.dxfTexto])
 
   if (error) {
