@@ -57,7 +57,7 @@ export interface PedidoGenerar {
   modeloActual?: string
   /** 'crear' | 'editar' | 'imagen' | 'corregir' | 'desconocido'. */
   tipo?: string
-  /** 'auto' | 'anthropic' | 'openai' | 'ollama'. */
+  /** 'auto' | 'anthropic' | 'openai' | 'groq' | 'gemini' | 'mistral' | 'openrouter' | 'ollama'. */
   proveedorPreferido?: string
   /** Modelo concreto de Ollama (p. ej. 'qwen2.5-coder:7b'). */
   ollamaModelo?: string
@@ -102,14 +102,29 @@ export interface RespuestaModelosOllama {
 export interface ConfigIAVista {
   anthropicApiKey: string
   openaiApiKey: string
+  groqApiKey: string
+  geminiApiKey: string
+  mistralApiKey: string
+  openrouterApiKey: string
   ollamaUrl: string
   /** Indica si las claves también existen como variables de entorno. */
-  entorno: { anthropic: boolean; openai: boolean }
+  entorno: {
+    anthropic: boolean
+    openai: boolean
+    groq: boolean
+    gemini: boolean
+    mistral: boolean
+    openrouter: boolean
+  }
 }
 
 /** Payload de `ia:guardar-config`. */
 export interface ConfigIAGuardar {
   anthropicApiKey?: string
   openaiApiKey?: string
+  groqApiKey?: string
+  geminiApiKey?: string
+  mistralApiKey?: string
+  openrouterApiKey?: string
   ollamaUrl?: string
 }

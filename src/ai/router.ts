@@ -10,12 +10,26 @@
  * - GPT-6 Astra (Codex): mejor en create-and-edit (44.37)
  */
 
+import { ProveedorIA } from './providers/base'
 import { AnthropicProvider } from './providers/anthropic'
 import { OpenAIProvider } from './providers/openai'
 import { OllamaProvider } from './providers/ollama'
+import { GeminiProvider } from './providers/gemini'
+import { ProveedorOpenAICompatible } from './providers/openaiCompatible'
 import { ejemploPlacaConAgujeros } from '../cad/generator'
 
 export type TipoTarea = 'crear' | 'editar' | 'imagen' | 'corregir' | 'desconocido'
+
+/** Identificadores de proveedores soportados por el router */
+export type ProveedorId =
+  | 'anthropic'
+  | 'openai'
+  | 'groq'
+  | 'gemini'
+  | 'mistral'
+  | 'openrouter'
+  | 'ollama'
+  | 'auto'
 
 export interface ContextoGenerar {
   prompt: string
@@ -41,6 +55,10 @@ export interface RespuestaRouter {
 export class CADRouter {
   private anthropic!: AnthropicProvider
   private openai!: OpenAIProvider
+  private groq!: ProveedorOpenAICompatible
+  private gemini!: GeminiProvider
+  private mistral!: ProveedorOpenAICompatible
+  private openrouter!: ProveedorOpenAICompatible
   private ollama!: OllamaProvider
 
   constructor() {
@@ -54,6 +72,25 @@ export class CADRouter {
   recargarProveedores() {
     this.anthropic = new AnthropicProvider(process.env.ANTHROPIC_API_KEY || '')
     this.openai = new OpenAIProvider(process.env.OPENAI_API_KEY || '')
+    this.groq = new ProveedorOpenAICompatible(
+      'groq',
+      process.env.GROQ_API_KEY || '',
+      'https://api.groq.com/openai/v1',
+      process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
+    )
+    this.gemini = new GeminiProvider(process.env.GEMINI_API_KEY || '')
+    this.mistral = new ProveedorOpenAICompatible(
+      'mistral',
+      process.env.MISTRAL_API_KEY || '',
+      'https://api.mistral.ai/v1',
+      process.env.MISTRAL_MODEL || 'mistral-small-latest'
+    )
+    this.openrouter = new ProveedorOpenAICompatible(
+      'openrouter',
+      process.env.OPENROUTER_API_KEY || '',
+      'https://openrouter.ai/api/v1',
+      process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free'
+    )
     this.ollama = new OllamaProvider(process.env.OLLAMA_URL || 'http://localhost:11434')
   }
 
@@ -72,9 +109,19 @@ export class CADRouter {
 
     // Proveedor elegido a mano por el usuario (si no es 'auto')
     const preferido = this.proveedorPorId(proveedorPreferido)
-    const proveedor = preferido ?? this.seleccionarProveedor(tareaDetectada)
+    // Cadena de proveedores candidatos para la tarea detectada. Si no hay preferido
+    // explicito se usa la cadena de la tarea (priorizando opciones gratuitas en la nube).
+    const cadena = preferido ? [preferido] : this.cadenaPorTarea(tareaDetectada)
 
-    if (await proveedor.disponible()) {
+    let proveedor: ProveedorIA | null = null
+    for (const candidato of cadena) {
+      if (await candidato.disponible()) {
+        proveedor = candidato
+        break
+      }
+    }
+
+    if (proveedor) {
       try {
         const resultado = await this.ejecutarConProveedor(proveedor, prompt, modeloActual, tareaDetectada, opciones)
         return {
@@ -99,9 +146,9 @@ export class CADRouter {
       }
     }
 
-    // 3. Ningún proveedor de pago disponible → Ollama local
-    if (proveedor.nombre !== 'ollama' && (await this.ollama.disponible())) {
-      console.log('[Router] Solo Ollama disponible, usando local')
+    // 3. Ningún proveedor disponible en la cadena: probar Ollama local
+    if (await this.ollama.disponible()) {
+      console.log('[Router] Usando fallback Ollama')
       const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, tareaDetectada, opciones)
       return { ...resultado, tareaDetectada, proveedorUsado: 'ollama' }
     }
@@ -119,7 +166,7 @@ export class CADRouter {
   }
 
   /** Devuelve el proveedor elegido por el usuario, o null si es 'auto'/desconocido */
-  private proveedorPorId(id?: string): AnthropicProvider | OpenAIProvider | OllamaProvider | null {
+  private proveedorPorId(id?: string): ProveedorIA | null {
     switch (id) {
       case 'anthropic':
         return this.anthropic
@@ -150,19 +197,19 @@ export class CADRouter {
     return 'crear'
   }
 
-  private seleccionarProveedor(tarea: TipoTarea): AnthropicProvider | OpenAIProvider | OllamaProvider {
+  private cadenaPorTarea(tarea: TipoTarea): ProveedorIA[] {
     // Mejor modelo por tarea según benchmarks CAD
     switch (tarea) {
       case 'crear':
-        return this.anthropic // Claude Opus 5.5 — mejor create general
+        return [this.groq, this.gemini, this.anthropic, this.openai]
       case 'editar':
-        return this.openai // GPT-6 Astra — mejor create-and-edit
+        return [this.groq, this.openai, this.anthropic]
       case 'imagen':
-        return this.anthropic // Claude Opus 5.5 — líder image-to-CAD
+        return [this.gemini, this.anthropic, this.openai]
       case 'corregir':
-        return this.openai // GPT-6 Astra — bueno iterando sobre errores
+        return [this.groq, this.openai, this.anthropic]
       default:
-        return this.anthropic
+        return [this.groq, this.gemini, this.anthropic, this.openai]
     }
   }
 
@@ -209,7 +256,7 @@ REGLAS DE EDICIÓN (CRÍTICAS):
   }
 
   private async ejecutarConProveedor(
-    proveedor: AnthropicProvider | OpenAIProvider | OllamaProvider,
+    proveedor: ProveedorIA,
     prompt: string,
     modeloActual: string | undefined,
     tarea: TipoTarea,

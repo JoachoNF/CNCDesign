@@ -17,8 +17,19 @@ import {
 interface EstadoConfig {
   anthropicApiKey: string
   openaiApiKey: string
+  groqApiKey: string
+  geminiApiKey: string
+  mistralApiKey: string
+  openrouterApiKey: string
   ollamaUrl: string
-  entorno: { anthropic: boolean; openai: boolean }
+  entorno: {
+    anthropic: boolean
+    openai: boolean
+    groq: boolean
+    gemini: boolean
+    mistral: boolean
+    openrouter: boolean
+  }
 }
 
 /**
@@ -70,6 +81,10 @@ export function SelectorModeloIA({ className }: { className?: string }) {
 
   const claveClaude = Boolean(config?.anthropicApiKey)
   const claveGPT = Boolean(config?.openaiApiKey)
+  const claveGroq = Boolean(config?.groqApiKey)
+  const claveGemini = Boolean(config?.geminiApiKey)
+  const claveMistral = Boolean(config?.mistralApiKey)
+  const claveOpenRouter = Boolean(config?.openrouterApiKey)
 
   const etiqueta =
     proveedorIA === 'auto'
@@ -78,10 +93,18 @@ export function SelectorModeloIA({ className }: { className?: string }) {
         ? 'Claude (Anthropic)'
         : proveedorIA === 'openai'
           ? 'GPT (OpenAI)'
-          : `Ollama · ${modelosOcultar(ollamaModelo)}`
+          : proveedorIA === 'groq'
+            ? 'Groq (gratis · nube)'
+            : proveedorIA === 'gemini'
+              ? 'Gemini (gratis · nube)'
+              : proveedorIA === 'mistral'
+                ? 'Mistral (gratis · nube)'
+                : proveedorIA === 'openrouter'
+                  ? 'OpenRouter (gratis · nube)'
+                  : `Ollama · ${modelosOcultar(ollamaModelo)}`
 
   const opciones: Array<{
-    id: 'auto' | 'anthropic' | 'openai' | 'ollama'
+    id: 'auto' | 'anthropic' | 'openai' | 'groq' | 'gemini' | 'mistral' | 'openrouter' | 'ollama'
     icono: ReactNode
     tile: string
     titulo: string
@@ -121,6 +144,78 @@ export function SelectorModeloIA({ className }: { className?: string }) {
       desc: 'API paga · mejor editando modelos',
       badge: config ? (
         claveGPT ? (
+          <Badge variant="success" className="shrink-0">
+            key ✓
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="shrink-0">
+            sin key
+          </Badge>
+        )
+      ) : null,
+    },
+    {
+      id: 'groq',
+      icono: <Bot />,
+      tile: acentos.ambar.tile,
+      titulo: 'Groq (gratis · nube)',
+      desc: 'API gratuita · Llama en la nube',
+      badge: config ? (
+        claveGroq ? (
+          <Badge variant="success" className="shrink-0">
+            key ✓
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="shrink-0">
+            sin key
+          </Badge>
+        )
+      ) : null,
+    },
+    {
+      id: 'gemini',
+      icono: <Bot />,
+      tile: acentos.violeta.tile,
+      titulo: 'Gemini (gratis · nube)',
+      desc: 'API gratuita · Google · mejor en crear',
+      badge: config ? (
+        claveGemini ? (
+          <Badge variant="success" className="shrink-0">
+            key ✓
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="shrink-0">
+            sin key
+          </Badge>
+        )
+      ) : null,
+    },
+    {
+      id: 'mistral',
+      icono: <Bot />,
+      tile: acentos.esmeralda.tile,
+      titulo: 'Mistral (gratis · nube)',
+      desc: 'API gratuita · modelos open weights',
+      badge: config ? (
+        claveMistral ? (
+          <Badge variant="success" className="shrink-0">
+            key ✓
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="shrink-0">
+            sin key
+          </Badge>
+        )
+      ) : null,
+    },
+    {
+      id: 'openrouter',
+      icono: <Bot />,
+      tile: acentos.cian.tile,
+      titulo: 'OpenRouter (gratis · nube)',
+      desc: 'Gateway multi-modelo · opciones free',
+      badge: config ? (
+        claveOpenRouter ? (
           <Badge variant="success" className="shrink-0">
             key ✓
           </Badge>

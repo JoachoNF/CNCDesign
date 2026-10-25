@@ -14,8 +14,19 @@ import { contextBridge, ipcRenderer } from 'electron'
 export interface ConfigIAVista {
   anthropicApiKey: string
   openaiApiKey: string
+  groqApiKey: string
+  geminiApiKey: string
+  mistralApiKey: string
+  openrouterApiKey: string
   ollamaUrl: string
-  entorno: { anthropic: boolean; openai: boolean }
+  entorno: {
+    anthropic: boolean
+    openai: boolean
+    groq: boolean
+    gemini: boolean
+    mistral: boolean
+    openrouter: boolean
+  }
 }
 
 export interface CanalCAD {
@@ -40,6 +51,10 @@ export interface CanalCAD {
     guardarConfig: (config: {
       anthropicApiKey?: string
       openaiApiKey?: string
+      groqApiKey?: string
+      geminiApiKey?: string
+      mistralApiKey?: string
+      openrouterApiKey?: string
       ollamaUrl?: string
     }) => Promise<{ ok: boolean }>
     modelosOllama: () => Promise<{ ok: boolean; modelos: string[] }>

@@ -25,6 +25,10 @@ let mainWindow: BrowserWindow | null = null
 interface ConfigIA {
   anthropicApiKey?: string
   openaiApiKey?: string
+  groqApiKey?: string
+  geminiApiKey?: string
+  mistralApiKey?: string
+  openrouterApiKey?: string
   ollamaUrl?: string
 }
 
@@ -48,6 +52,10 @@ async function aplicarConfigIA(): Promise<ConfigIA> {
   const config = await leerConfigIA()
   if (config.anthropicApiKey) process.env.ANTHROPIC_API_KEY = config.anthropicApiKey
   if (config.openaiApiKey) process.env.OPENAI_API_KEY = config.openaiApiKey
+  if (config.groqApiKey) process.env.GROQ_API_KEY = config.groqApiKey
+  if (config.geminiApiKey) process.env.GEMINI_API_KEY = config.geminiApiKey
+  if (config.mistralApiKey) process.env.MISTRAL_API_KEY = config.mistralApiKey
+  if (config.openrouterApiKey) process.env.OPENROUTER_API_KEY = config.openrouterApiKey
   if (config.ollamaUrl) process.env.OLLAMA_URL = config.ollamaUrl
   return config
 }
@@ -292,10 +300,18 @@ ipcMain.handle('ia:obtener-config', async () => {
   return {
     anthropicApiKey: config.anthropicApiKey || '',
     openaiApiKey: config.openaiApiKey || '',
+    groqApiKey: config.groqApiKey || '',
+    geminiApiKey: config.geminiApiKey || '',
+    mistralApiKey: config.mistralApiKey || '',
+    openrouterApiKey: config.openrouterApiKey || '',
     ollamaUrl: config.ollamaUrl || 'http://localhost:11434',
     entorno: {
       anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
       openai: Boolean(process.env.OPENAI_API_KEY),
+      groq: Boolean(process.env.GROQ_API_KEY),
+      gemini: Boolean(process.env.GEMINI_API_KEY),
+      mistral: Boolean(process.env.MISTRAL_API_KEY),
+      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
     },
   }
 })

@@ -26,7 +26,7 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 
 - **Visor 3D/2D** — renderiza cualquier `.dxf` (importado o generado por IA) con Three.js y `dxf-render`. Cámara orbitable, vistas rápidas (frontal/superior/lateral/isométrica), cuadrícula, encuadre automático, selección de capas, pantalla completa y tarjeta de atajos integrada.
 - **Terminal IA** — chat en español con historial; el usuario describe el modelo y el router multi-IA elige el proveedor adecuado. La respuesta incluye un bloque `dxf` que puede **aplicarse al visor** o **exportarse** como archivo.
-- **Router multi-IA con fallback** — Anthropic (Claude), OpenAI (GPT) y Ollama (local, gratuito). Clasifica la tarea (crear / editar / imagen / corregir) y cae en cascada al siguiente proveedor disponible si el principal falla.
+- **Router multi-IA con fallback** — Anthropic (Claude), OpenAI (GPT), Groq / Gemini / Mistral / OpenRouter (gratuitos en la nube) y Ollama (local, gratuito). Clasifica la tarea (crear / editar / imagen / corregir) y cae en cascada al siguiente proveedor disponible si el principal falla.
 - **Selector de modelo** — píldora sobre el compositor de la terminal con lista de proveedores y **listado en vivo de los modelos Ollama instalados** (`/api/tags`). La elección se guarda entre sesiones.
 - **Configuración de claves API** — modal con campos mostrar/ocultar; se guardan localmente en `config-ia.json` (dentro de los datos de usuario de la app) y tienen prioridad sobre las variables de entorno.
 - **Edición manual sin IA** — mover, rotar, escalar y espejar las entidades del modelo actual con campos numéricos y presets; incluye **pila de deshacer** de 15 pasos. Todo el ciclo (texto `.dxf` → entidades → transformación → texto `.dxf`) ocurre en módulos puros y testables.
@@ -67,7 +67,7 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 │  │  el bloque ```dxf``` de la respuesta                                    │ │
 │  └──────┬──────────────────┬──────────────────┬────────────────────────────┘ │
 │         ▼                  ▼                  ▼                              │
-│   Anthropic (Claude)   OpenAI (GPT)      Ollama (local · gratis)             │
+│   Anthropic (Claude)   OpenAI (GPT)      Groq (gratis · nube)   Gemini (gratis · nube)   Ollama (local · gratis)             │
 │                                                                              │
 │  Herramientas de edición: texto DXF → entidades → transformar → DXF          │
 └──────────────────────────────────┬───────────────────────────────────────────┘
@@ -84,7 +84,7 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 
 1. El usuario escribe en la **Terminal IA** (ej: *"placa de 100×60 mm con 4 agujeros de 8 mm"*).
 2. El router **clasifica la tarea** (`crear` / `editar` / `imagen` / `corregir`) por palabras clave y otros indicios, salvo que el usuario haya fijado un proveedor en el selector (que entonces se intenta primero).
-3. Se ejecuta la petición contra el proveedor elegido; si falla (sin clave, error de red, timeout), se **cae en cascada** al siguiente proveedor disponible (terminando en Ollama local si está activo).
+3. Se ejecuta la petición contra el proveedor elegido (o contra la primera opción gratuita de la cadena para la tarea); si falla (sin clave, error de red, timeout), se **cae en cascada** al siguiente proveedor disponible (terminando en Ollama local si está activo).
 4. De la respuesta se extrae el **bloque `dxf`**; opcionalmente se **valida** con las reglas CNC (`src/cad/validator.ts`).
 5. El usuario pulsa **Aplicar al visor**: el texto DXF pasa al renderer, que lo parsea (`dxf-render`) y lo dibuja. Desde allí puede **editarse a mano** o **exportarse**.
 
@@ -93,7 +93,7 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 | Módulo | Ruta | Responsabilidad |
 |---|---|---|
 | Router IA | `src/ai/router.ts` | Clasificación de tarea, preferencia de proveedor, fallback, extracción del DXF |
-| Proveedores | `src/ai/providers/` | `anthropic.ts`, `openai.ts`, `ollama.ts` + interfaz común en `base.ts` |
+| Proveedores | `src/ai/providers/` | `anthropic.ts`, `openai.ts`, `groq.ts`, `gemini.ts`, `openaiCompatible.ts`, `ollama.ts` + interfaz común en `base.ts` |
 | Prompts de modelado | `src/ai/prompts/` | System prompts de referencia (creación, edición, corrección, image-to-CAD) |
 | Núcleo CAD | `src/cad/` | `parser.ts` (DXF→entidades), `writer.ts` (entidades→DXF R2010), `generator.ts` (primitivas), `validator.ts` (reglas CNC) |
 | Edición | `src/cad/transformaciones.ts`, `src/cad/edicion.ts` | Transformaciones puras y ciclo completo texto→entidades→texto |
@@ -108,7 +108,7 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 - **UI:** React 18 + Tailwind CSS v4 (CSS-first, sin `tailwind.config`) + `class-variance-authority`
 - **Visor:** Three.js (`OrbitControls`) + `dxf-render` (parser y creador de objetos Three)
 - **Estado:** Zustand (con `persist` en `localStorage` para lo esencial)
-- **IA:** Router propio; SDKs `@anthropic-ai/sdk` y `openai`; Ollama vía HTTP (`/api/chat`, `/api/tags`)
+- **IA:** Router propio; SDKs `@anthropic-ai/sdk` y `openai`; Groq / Gemini / Mistral / OpenRouter vía HTTP OpenAI-compatible (`/chat/completions`); Ollama vía HTTP (`/api/chat`, `/api/tags`)
 - **Empaquetado:** `electron-builder` (AppImage en Linux, NSIS en Windows, app en macOS)
 
 ## Estructura del proyecto
@@ -211,6 +211,14 @@ Al guardar desde el modal, los proveedores se recargan en caliente (`recargarPro
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Clave de Anthropic (Claude) | *(vacío → proveedor no disponible)* |
 | `OPENAI_API_KEY` | Clave de OpenAI (GPT) | *(vacío → proveedor no disponible)* |
+| `GROQ_API_KEY` | Clave de Groq (API gratuita · nube, Llama) | *(vacío → proveedor no disponible)* |
+| `GROQ_MODEL` | Modelo Groq por defecto | `llama-3.3-70b-versatile` |
+| `GEMINI_API_KEY` | Clave de Google Gemini (API gratuita · nube) | *(vacío → proveedor no disponible)* |
+| `GEMINI_MODEL` | Modelo Gemini por defecto | `gemini-2.0-flash` |
+| `MISTRAL_API_KEY` | Clave de Mistral (API gratuita · nube) | *(vacío → proveedor no disponible)* |
+| `MISTRAL_MODEL` | Modelo Mistral por defecto | `mistral-small-latest` |
+| `OPENROUTER_API_KEY` | Clave de OpenRouter (API gratuita · nube) | *(vacío → proveedor no disponible)* |
+| `OPENROUTER_MODEL` | Modelo OpenRouter por defecto | `meta-llama/llama-3.3-70b-instruct:free` |
 | `OLLAMA_URL` | URL del servidor Ollama | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Modelo Ollama por defecto | `qwen2.5-coder:7b` |
 | `NODE_ENV` | `development` activa los hooks de desarrollo (los DevTools ya no se abren automáticamente) | — |
@@ -219,12 +227,11 @@ Al guardar desde el modal, los proveedores se recargan en caliente (`recargarPro
 
 Con el selector en **Auto**, el router clasifica la intención y aplica esta preferencia (con fallback en cascada; Ollama actúa como último recurso gratuito):
 
-| Tarea detectada | Preferido | Fallbacks |
-|---|---|---|
-| Crear un modelo nuevo | Anthropic (Claude) | OpenAI → Ollama |
-| Editar un modelo existente | OpenAI (GPT) | Anthropic → Ollama |
-| Desde imagen / dibujo | Anthropic (Claude) | OpenAI → Ollama |
-| Corregir errores | OpenAI (GPT) | Anthropic → Ollama |
+| Tarea detectada | Cadena de proveedores (Auto) |
+| Crear un modelo nuevo | Groq (gratis · nube) → Gemini (gratis · nube) → Anthropic → OpenAI |
+| Editar un modelo existente | Groq (gratis · nube) → OpenAI → Anthropic |
+| Desde imagen / dibujo | Gemini (gratis · nube) → Anthropic → OpenAI |
+| Corregir errores | Groq (gratis · nube) → OpenAI → Anthropic |
 
 Con un proveedor fijado en el selector, ese se intenta **primero** y después se aplica la misma cascada. Referencia de benchmarks usada para el diseño del router (Parametric CAD Bench v3, sept. 2026):
 

@@ -16,7 +16,15 @@ import { persist } from 'zustand/middleware'
 export type TipoModelo = '2d' | '3d' | 'mixto'
 
 /** Proveedor de IA preferido para las peticiones ('auto' = router decide) */
-export type ProveedorIAId = 'auto' | 'anthropic' | 'openai' | 'ollama'
+export type ProveedorIAId =
+  | 'auto'
+  | 'anthropic'
+  | 'openai'
+  | 'groq'
+  | 'gemini'
+  | 'mistral'
+  | 'openrouter'
+  | 'ollama'
 
 export interface EntidadDXF {
   id: string

@@ -87,7 +87,15 @@ export function TerminalIA({ className }: { className?: string }) {
           ? 'Claude (Anthropic)'
           : proveedorIA === 'openai'
             ? 'GPT (OpenAI)'
-            : `Ollama (${ollamaModelo})`
+            : proveedorIA === 'groq'
+              ? 'Groq (gratis · nube)'
+              : proveedorIA === 'gemini'
+                ? 'Gemini (gratis · nube)'
+                : proveedorIA === 'mistral'
+                  ? 'Mistral (gratis · nube)'
+                  : proveedorIA === 'openrouter'
+                    ? 'OpenRouter (gratis · nube)'
+                    : `Ollama (${ollamaModelo})`
     setMensajes((prev) => [
       ...prev,
       { id: `u-${idPedido}`, remitente: 'usuario', texto: textoUsuario, timestamp: new Date() },
