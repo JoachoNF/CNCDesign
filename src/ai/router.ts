@@ -39,6 +39,10 @@ export interface ContextoGenerar {
   proveedorPreferido?: string
   /** Modelo concreto de Ollama (p. ej. 'qwen2.5-coder:7b') */
   ollamaModelo?: string
+  /** Identificador de la solicitud (para cancelar vía IPC) */
+  abortId?: string
+  /** Señal de cancelación del proceso de generación */
+  signal?: AbortSignal
 }
 
 export interface RespuestaRouter {
@@ -103,9 +107,10 @@ export class CADRouter {
     tipo = 'crear',
     proveedorPreferido,
     ollamaModelo,
+    signal,
   }: ContextoGenerar): Promise<RespuestaRouter> {
     const tareaDetectada = this.clasificarTarea(prompt, tipo)
-    const opciones = { ollamaModelo }
+    const opciones = { ollamaModelo, signal }
 
     // Proveedor elegido a mano por el usuario (si no es 'auto')
     const preferido = this.proveedorPorId(proveedorPreferido)
@@ -260,7 +265,7 @@ REGLAS DE EDICIÓN (CRÍTICAS):
     prompt: string,
     modeloActual: string | undefined,
     tarea: TipoTarea,
-    opciones: { ollamaModelo?: string } = {}
+    opciones: { ollamaModelo?: string; signal?: AbortSignal } = {}
   ): Promise<Pick<RespuestaRouter, 'ok' | 'dxf' | 'errores' | 'modeloIA'>> {
     const systemPrompt = this.buildSystemPrompt(tarea)
     const promptCompleto = this.buildUserPrompt(prompt, modeloActual, tarea)
@@ -273,6 +278,7 @@ REGLAS DE EDICIÓN (CRÍTICAS):
       temperatura: 0.2,
       maxTokens: 4000,
       modelo,
+      signal: opciones.signal,
     })
 
     const dxfExtraido = this.extraerDXF(respuesta.texto)

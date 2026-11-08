@@ -31,7 +31,7 @@ export class OllamaProvider extends ProveedorIA {
       headers: { 'Content-Type': 'application/json' },
       // Tiempo máximo generoso (los modelos locales en CPU pueden tardar);
       // evita que la petición quede colgada indefinidamente
-      signal: AbortSignal.timeout(15 * 60 * 1000),
+      signal: opciones.signal ?? AbortSignal.timeout(15 * 60 * 1000),
       body: JSON.stringify({
         model: modelo,
         prompt,

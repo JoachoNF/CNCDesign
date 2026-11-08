@@ -17,6 +17,8 @@ export interface OpcionesIA {
   maxTokens?: number
   baseURL?: string
   systemPrompt?: string
+  /** Señal de cancelación (abort) para detener la generación activa */
+  signal?: AbortSignal
 }
 
 export interface RespuestaIA {

@@ -38,6 +38,7 @@ export class AnthropicProvider extends ProveedorIA {
         system: opciones.systemPrompt || '',
         messages: [{ role: 'user', content: prompt }],
       }),
+      signal: opciones.signal,
     })
 
     if (!respuesta.ok) {

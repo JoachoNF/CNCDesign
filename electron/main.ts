@@ -236,14 +236,52 @@ app.on('window-all-closed', () => {
 
 // ===================== CANALES IPC =====================
 
+// Mapa de controladores AbortController por id de generación (para "stop" desde la terminal IA)
+const controladoresAbort = new Map<string, AbortController>()
+
 // cad:generar — solicita al router IA generar/modificar un modelo y devuelve DXF
 ipcMain.handle(
   'cad:generar',
-  async (_event, { prompt, modeloActual, tipo, proveedorPreferido, ollamaModelo }) => {
-    const { cadRouter } = await import('../src/ai/router')
-    return cadRouter.generar({ prompt, modeloActual, tipo, proveedorPreferido, ollamaModelo })
+  async (
+    _event,
+    { prompt, modeloActual, tipo, proveedorPreferido, ollamaModelo, signal, abortId }: any
+  ) => {
+    const id = abortId || `gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    const controller = new AbortController()
+    controladoresAbort.set(id, controller)
+    try {
+      const { cadRouter } = await import('../src/ai/router')
+      const resultado = await cadRouter.generar({
+        prompt,
+        modeloActual,
+        tipo,
+        proveedorPreferido,
+        ollamaModelo,
+        signal: controller.signal,
+      })
+      return resultado
+    } catch (error: any) {
+      if (controller.signal.aborted) {
+        // La generación fue detenida por el usuario ("stop" desde la terminal IA)
+        return {
+          ok: false,
+          cancelado: true,
+          errores: ['Consulta detenida por el usuario'],
+        }
+      }
+      throw error
+    } finally {
+      controladoresAbort.delete(id)
+    }
   }
 )
+
+// cad:detener-generacion — aborta la generación activa (stop desde la terminal IA)
+ipcMain.handle('cad:detener-generacion', async (_event, { id }: { id: string }) => {
+  const controller = controladoresAbort.get(id)
+  if (controller) controller.abort()
+  return { ok: true }
+})
 
 // cad:validar — valida manufacturabilidad CNC de un DXF
 ipcMain.handle('cad:validar', async (_event, { dxfTexto }) => {

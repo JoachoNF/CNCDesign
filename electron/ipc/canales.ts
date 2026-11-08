@@ -34,6 +34,8 @@ export const CANALES = {
   IMPORTAR: 'cad:importar',
   /** Lista los modelos instalados en el servidor Ollama. */
   MODELOS_OLLAMA: 'cad:modelos-ollama',
+  /** Detiene la generación IA activa (id de la solicitud). */
+  DETENER_GENERACION: 'cad:detener-generacion',
 
   /** Alterna la pantalla completa de la ventana (devuelve el estado nuevo). */
   VENTANA_ALTERNAR: 'ventana:alternarPantallaCompleta',
@@ -61,6 +63,15 @@ export interface PedidoGenerar {
   proveedorPreferido?: string
   /** Modelo concreto de Ollama (p. ej. 'qwen2.5-coder:7b'). */
   ollamaModelo?: string
+  /** Identificador de la solicitud (para cancelar vía IPC). */
+  abortId?: string
+  /** Señal de cancelación del proceso de generación. */
+  signal?: AbortSignal
+}
+
+/** Respuesta de `cad:detener-generacion`. */
+export interface RespuestaDetener {
+  ok: boolean
 }
 
 /** Respuesta de `cad:generar` (misma forma que RespuestaRouter). */

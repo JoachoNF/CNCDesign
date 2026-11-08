@@ -14,7 +14,7 @@ import { useModelStore } from '../store/modelStore'
 import { Panel, SectionHeader, Button, Badge } from './ui'
 import { SelectorModeloIA } from './SelectorModeloIA'
 import { cn } from './utils'
-import { Send, FileText, Zap, Loader2, Sparkles, RotateCw, Settings } from 'lucide-react'
+import { Send, FileText, Zap, Loader2, Sparkles, RotateCw, Settings, Square } from 'lucide-react'
 
 export interface Mensaje {
   id: string
@@ -50,6 +50,7 @@ export function TerminalIA({ className }: { className?: string }) {
   const [procesando, setProcesando] = useState(false)
   const [conectadoElectron, setConectadoElectron] = useState<boolean | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const idSolicitudRef = useRef<string | null>(null)
 
   const scrollAbajo = () => endRef.current?.scrollIntoView({ behavior: 'smooth' })
 
@@ -74,10 +75,18 @@ export function TerminalIA({ className }: { className?: string }) {
 
   useEffect(() => scrollAbajo(), [mensajes, procesando])
 
+  /** Detiene la consulta IA en curso (envía el id al proceso principal para abortar) */
+  function detenerConsulta() {
+    const id = idSolicitudRef.current
+    if (id) void window.apiCAD?.detenerGeneracion(id)
+  }
+
   async function enviar() {
     if (!input.trim() || procesando) return
     const textoUsuario = input.trim()
     setInput('')
+    const idSolicitud = crypto.randomUUID()
+    idSolicitudRef.current = idSolicitud
 
     const idPedido = agregarPedido(textoUsuario)
     const etiquetaProveedor =
@@ -131,6 +140,7 @@ export function TerminalIA({ className }: { className?: string }) {
         tipo: 'desconocido',
         proveedorPreferido: proveedorIA,
         ollamaModelo,
+        abortId: idSolicitud,
       })
 
       actualizarPedido(idPedido, {
@@ -152,6 +162,18 @@ export function TerminalIA({ className }: { className?: string }) {
             : m
         )
       )
+
+      if (respuesta?.cancelado) {
+        setMensajes((prev) => [
+          ...prev,
+          {
+            id: `stop-${idPedido}`,
+            remitente: 'sistema',
+            texto: '⏹ Consulta detenida por el usuario.',
+            timestamp: new Date(),
+          },
+        ])
+      }
 
       if (respuesta?.ok && respuesta.dxf) {
         setMensajes((prev) => [
@@ -351,14 +373,26 @@ export function TerminalIA({ className }: { className?: string }) {
             onKeyDown={(e) => e.key === 'Enter' && enviar()}
             disabled={procesando || !conectadoElectron}
           />
-          <Button
-            size="icon-sm"
-            onClick={enviar}
-            disabled={procesando || !conectadoElectron || !input.trim()}
-            aria-label="Enviar"
-          >
-            {procesando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-          </Button>
+          {procesando ? (
+            <Button
+              size="icon-sm"
+              onClick={detenerConsulta}
+              aria-label="Detener consulta"
+              title="Detener consulta"
+              className="border-rose-400/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+            >
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button
+              size="icon-sm"
+              onClick={enviar}
+              disabled={!conectadoElectron || !input.trim()}
+              aria-label="Enviar"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </Panel>

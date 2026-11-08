@@ -40,6 +40,7 @@ export class GeminiProvider extends ProveedorIA {
             maxOutputTokens: maxTokens,
           },
         }),
+        signal: opciones.signal,
       }
     )
 

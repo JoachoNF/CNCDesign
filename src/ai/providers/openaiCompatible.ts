@@ -47,6 +47,7 @@ export class ProveedorOpenAICompatible extends ProveedorIA {
           { role: 'user', content: prompt },
         ],
       }),
+        signal: opciones.signal,
     })
 
     if (!respuesta.ok) {

@@ -36,10 +36,14 @@ export interface CanalCAD {
     tipo?: string
     proveedorPreferido?: string
     ollamaModelo?: string
+    abortId?: string
+    signal?: AbortSignal
   }) => Promise<any>
   validar: (args: { dxfTexto: string }) => Promise<any>
   exportar: (args: { contenido: string; nombre?: string }) => Promise<any>
   importar: () => Promise<any>
+  /** Detiene la generación IA activa (id de la solicitud en curso). */
+  detenerGeneracion: (id: string) => Promise<{ ok: boolean }>
   ventana: {
     alternarPantallaCompleta: () => Promise<boolean>
     salirPantallaCompleta: () => Promise<boolean>
@@ -67,6 +71,7 @@ contextBridge.exposeInMainWorld('apiCAD', {
   validar: (args) => ipcRenderer.invoke('cad:validar', args),
   exportar: (args) => ipcRenderer.invoke('cad:exportar', args),
   importar: () => ipcRenderer.invoke('cad:importar'),
+  detenerGeneracion: (id: string) => ipcRenderer.invoke('cad:detener-generacion', { id }),
   ventana: {
     alternarPantallaCompleta: () => ipcRenderer.invoke('ventana:alternarPantallaCompleta'),
     salirPantallaCompleta: () => ipcRenderer.invoke('ventana:salirPantallaCompleta'),
