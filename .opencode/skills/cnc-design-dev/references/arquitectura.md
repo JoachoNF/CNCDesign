@@ -35,7 +35,9 @@ Renderer (React + Zustand + Tailwind)  ── window.apiCAD ──  Main (Electr
 | `extraerCabecera` | `(textoDXF) → Record<string,string>` | Variables de la sección HEADER |
 | `escribirDXF` | `(entidades, {unidades?, nombreDibujo?, versionACAD?}) → string` | DXF ASCII; por defecto `AC1027` (R2013) y mm |
 | `primitivasADXF` | `(modelo: ModeloParametrico) → string` | Primitivas paramétricas (placa, agujeros, etc.) |
-| `ejemploPlacaConAgujeros` | `() → string` | DXF de ejemplo para pruebas |
+| `ejemploPlacaConAgujeros` | `() → string` | DXF de ejemplo para pruebas (**ya no se usa como fallback del router**) |
+| `leerEntidadesDXF` | `(texto) → EntidadEditable[]` | Lector puro de pares código/valor del DXF destino (sin `dxf-render/parser`, para Node) |
+| `resolverConsultaLocal` | `(prompt, modeloActual?, tarea?) → { dxf, descripcion, advertencias, modo }` | Intérprete local en español: crea geometría variada o edita el modelo cargado cuando no hay IA externa |
 | `validarDXF` | `(textoDXF) → ResultadoValidacion` | Reglas CNC: contorno cerrado, unidades, espesores mínimos |
 | `trasladar` | `(entidades, dx, dy, dz=0)` | Transformaciones **puras**: devuelven una lista nueva |
 | `rotar` | `(entidades, grados, centro?)` | Centro por defecto: centro de la caja envolvente |
@@ -86,6 +88,13 @@ cadRouter.generar({
 ```
 
 `recargarProveedores()` reconstruye los proveedores leyendo `process.env` (se llama tras guardar claves en el modal de configuración).
+
+**Sin proveedores disponibles**: en lugar del antiguo `ejemploPlacaConAgujeros`,
+el router delega en `resolverConsultaLocal()` (`src/cad/interpretador.ts`), que
+interpreta la instrucción y genera/edita el DXF del modelo destino. La respuesta
+incluye `descripcion` y `advertencias`; el renderer aplica el resultado al visor
+automáticamente (opción `autoAplicarIA` en el store, persistida). Ver
+`docs/SISTEMA_DE_CONSULTAS.md`.
 
 ### src/renderer/ (UI)
 

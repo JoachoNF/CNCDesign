@@ -1,0 +1,12 @@
+# No trasladar configuración ni artefactos ajenos a la imagen final
+.git
+.gitignore
+node_modules
+dist
+release
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+docs/capturas

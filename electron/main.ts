@@ -15,6 +15,7 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeTheme, screen } from 'electron'
 import path from 'path'
 import * as fs from 'fs/promises'
+import type { ProgresoIA } from '../src/ai/providers/base'
 
 // Nota: __dirname está disponible nativamente porque el main se compila a CommonJS (ver tsconfig.build.json)
 
@@ -99,9 +100,9 @@ async function cargarPagina(window: BrowserWindow) {
 
     // Fallback: servir archivos estáticos de dist/ si Vite no responde
     console.warn('[Electron] Vite no respondió. Usando fallback a dist/index.html')
-    await window.loadFile(path.join(__dirname, '../dist/index.html'))
+    await window.loadFile(path.join(__dirname, '../index.html'))
   } else {
-    await window.loadFile(path.join(__dirname, '../dist/index.html'))
+    await window.loadFile(path.join(__dirname, '../index.html'))
   }
 }
 
@@ -243,12 +244,41 @@ const controladoresAbort = new Map<string, AbortController>()
 ipcMain.handle(
   'cad:generar',
   async (
-    _event,
+    event,
     { prompt, modeloActual, tipo, proveedorPreferido, ollamaModelo, signal, abortId }: any
   ) => {
     const id = abortId || `gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const controller = new AbortController()
     controladoresAbort.set(id, controller)
+
+    const inicio = Date.now()
+    /** Reenvía al renderer cada fragmento/cambio de fase del proveedor. */
+    const enviarProgreso = (progreso: ProgresoIA) => {
+      try {
+        event.sender.send('ia:progreso', { ...progreso, abortId: id })
+      } catch {
+        // La ventana pudo cerrarse mientras se generaba: se ignora.
+      }
+    }
+
+    // Latido independiente: aunque el proveedor no emita tokens (carga de un
+    // modelo local, "pensamiento" silencioso o red colgada), la terminal ve
+    // que el proceso sigue vivo y cuánto lleva esperando.
+    const latido = setInterval(() => {
+      if (!controller.signal.aborted) {
+        enviarProgreso({
+          fase: 'latido',
+          proveedor: '',
+          modelo: '',
+          texto: '',
+          acumulado: '',
+          tiempoMs: Date.now() - inicio,
+          tiempoPrimerTokenMs: 0,
+          abortId: id,
+        })
+      }
+    }, 5000)
+
     try {
       const { cadRouter } = await import('../src/ai/router')
       const resultado = await cadRouter.generar({
@@ -258,6 +288,8 @@ ipcMain.handle(
         proveedorPreferido,
         ollamaModelo,
         signal: controller.signal,
+        abortId: id,
+        progreso: enviarProgreso,
       })
       return resultado
     } catch (error: any) {
@@ -271,6 +303,7 @@ ipcMain.handle(
       }
       throw error
     } finally {
+      clearInterval(latido)
       controladoresAbort.delete(id)
     }
   }

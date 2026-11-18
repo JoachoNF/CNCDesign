@@ -10,13 +10,13 @@
  * - GPT-6 Astra (Codex): mejor en create-and-edit (44.37)
  */
 
-import { ProveedorIA } from './providers/base'
+import { ProveedorIA, type CallbackProgresoIA, type ProgresoIA } from './providers/base'
 import { AnthropicProvider } from './providers/anthropic'
 import { OpenAIProvider } from './providers/openai'
 import { OllamaProvider } from './providers/ollama'
 import { GeminiProvider } from './providers/gemini'
 import { ProveedorOpenAICompatible } from './providers/openaiCompatible'
-import { ejemploPlacaConAgujeros } from '../cad/generator'
+import { resolverConsultaLocal } from '../cad/interpretador'
 
 export type TipoTarea = 'crear' | 'editar' | 'imagen' | 'corregir' | 'desconocido'
 
@@ -43,6 +43,8 @@ export interface ContextoGenerar {
   abortId?: string
   /** Señal de cancelación del proceso de generación */
   signal?: AbortSignal
+  /** Recibe el razonamiento/texto parcial y los cambios de fase */
+  progreso?: CallbackProgresoIA
 }
 
 export interface RespuestaRouter {
@@ -54,6 +56,16 @@ export interface RespuestaRouter {
   costo?: number
   tareaDetectada?: TipoTarea
   proveedorUsado?: string
+  /** Qué se generó/editó (lo informa el generador local) */
+  descripcion?: string
+  /** Advertencias de manufacturabilidad o del intérprete local */
+  advertencias?: string[]
+  /** Razonamiento intermedio devuelto por el proveedor (si lo expone) */
+  pensamiento?: string
+  /** Duración total de la petición en milisegundos */
+  duracionMs?: number
+  /** Tiempo hasta el primer token en milisegundos */
+  tiempoPrimerTokenMs?: number
 }
 
 export class CADRouter {
@@ -108,9 +120,33 @@ export class CADRouter {
     proveedorPreferido,
     ollamaModelo,
     signal,
+    progreso,
+    abortId,
   }: ContextoGenerar): Promise<RespuestaRouter> {
+    const inicio = Date.now()
     const tareaDetectada = this.clasificarTarea(prompt, tipo)
-    const opciones = { ollamaModelo, signal }
+    const opciones = { ollamaModelo, signal, progreso, abortId }
+
+    /** Notifica un cambio de fase al renderer con el tiempo transcurrido. */
+    const notificar = (fase: ProgresoIA['fase'], proveedor: string, modelo: string, texto: string) => {
+      progreso?.({
+        fase,
+        proveedor,
+        modelo,
+        texto,
+        acumulado: '',
+        tiempoMs: Date.now() - inicio,
+        tiempoPrimerTokenMs: 0,
+        abortId,
+      })
+    }
+    /** Añade la duración total a cualquier respuesta final. */
+    const finalizar = (respuesta: RespuestaRouter): RespuestaRouter => ({
+      ...respuesta,
+      duracionMs: Date.now() - inicio,
+    })
+
+    notificar('info', 'router', '', `Tarea detectada: ${tareaDetectada}. Buscando proveedor…`)
 
     // Proveedor elegido a mano por el usuario (si no es 'auto')
     const preferido = this.proveedorPorId(proveedorPreferido)
@@ -120,6 +156,7 @@ export class CADRouter {
 
     let proveedor: ProveedorIA | null = null
     for (const candidato of cadena) {
+      notificar('info', candidato.nombre, '', `Comprobando ${candidato.nombre}…`)
       if (await candidato.disponible()) {
         proveedor = candidato
         break
@@ -127,46 +164,83 @@ export class CADRouter {
     }
 
     if (proveedor) {
+      notificar('info', proveedor.nombre, '', `Usando ${proveedor.nombre}`)
       try {
         const resultado = await this.ejecutarConProveedor(proveedor, prompt, modeloActual, tareaDetectada, opciones)
-        return {
+        if (!resultado.ok && proveedor.nombre !== 'ollama') {
+          // Respondió pero sin bloque DXF válido: probar Ollama y, si tampoco,
+          // resolver en local en lugar de dejar la terminal sin modelo.
+          if (await this.ollama.disponible()) {
+            notificar('info', 'ollama', '', 'El proveedor principal no devolvió DXF; probando Ollama…')
+            const alternativo = await this.ejecutarConProveedor(
+              this.ollama,
+              prompt,
+              modeloActual,
+              tareaDetectada,
+              opciones
+            )
+            if (alternativo.ok) {
+              return finalizar({ ...alternativo, tareaDetectada, proveedorUsado: 'ollama' })
+            }
+          }
+          return finalizar(this.resolverLocal(prompt, modeloActual, tareaDetectada, resultado.errores || []))
+        }
+        return finalizar({
           ...resultado,
           tareaDetectada,
           proveedorUsado: proveedor.nombre,
-        }
+        })
       } catch (error: any) {
         console.error(`[Router] Falló ${proveedor.nombre}:`, error.message)
         // 2. Fallback a Ollama si está disponible
         if (proveedor.nombre !== 'ollama' && (await this.ollama.disponible())) {
           console.log('[Router] Usando fallback Ollama')
+          notificar('info', 'ollama', '', `Fallo ${proveedor.nombre}; usando Ollama como respaldo…`)
           const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, tareaDetectada, opciones)
-          return { ...resultado, tareaDetectada, proveedorUsado: 'ollama' }
+          if (resultado.ok) return finalizar({ ...resultado, tareaDetectada, proveedorUsado: 'ollama' })
         }
-        return {
-          ok: false,
-          errores: [error.message || 'Error desconocido del proveedor'],
-          tareaDetectada,
-          proveedorUsado: proveedor.nombre,
-        }
+        // Sin Ollama (o también falló): el intérprete local resuelve la consulta.
+        return finalizar(
+          this.resolverLocal(prompt, modeloActual, tareaDetectada, [
+            `${proveedor.nombre} no respondió: ${error.message || 'error desconocido'}`,
+          ])
+        )
       }
     }
 
     // 3. Ningún proveedor disponible en la cadena: probar Ollama local
     if (await this.ollama.disponible()) {
       console.log('[Router] Usando fallback Ollama')
+      notificar('info', 'ollama', '', 'Ningún proveedor remoto disponible; usando Ollama local…')
       const resultado = await this.ejecutarConProveedor(this.ollama, prompt, modeloActual, tareaDetectada, opciones)
-      return { ...resultado, tareaDetectada, proveedorUsado: 'ollama' }
+      return finalizar({ ...resultado, tareaDetectada, proveedorUsado: 'ollama' })
     }
 
-    // Fallback final: generar un DXF de ejemplo localmente (modo demo) para que la terminal funcione sin IA externa
-    console.log('[Router] Usando fallback local (modo demo) — ninguna IA disponible')
-    const dxfDemo = ejemploPlacaConAgujeros()
+    // Ningún proveedor disponible: el intérprete local genera/edita la geometría
+    // pidiendo lo que el usuario pidió (ya no devuelve la placa de ejemplo).
+    notificar('info', 'local', '', 'Sin IA disponible; usando el generador local')
+    return finalizar(this.resolverLocal(prompt, modeloActual, tareaDetectada))
+  }
+
+  /** Resuelve la consulta con el generador/editor paramétrico local. */
+  private resolverLocal(
+    prompt: string,
+    modeloActual: string | undefined,
+    tarea: TipoTarea,
+    erroresPrevios: string[] = []
+  ): RespuestaRouter {
+    console.log('[Router] Usando intérprete local (sin IA externa disponible)')
+    const resultado = resolverConsultaLocal(prompt, modeloActual, tarea)
+    const partes: string[] = [resultado.descripcion]
+    if (resultado.modo === 'editar') partes.unshift('Modelo destino modificado:')
     return {
       ok: true,
-      dxf: dxfDemo,
-      modeloIA: 'local-demo',
-      tareaDetectada,
-      proveedorUsado: 'local-demo',
+      dxf: resultado.dxf,
+      modeloIA: 'generador-local',
+      tareaDetectada: tarea,
+      proveedorUsado: 'local',
+      descripcion: partes.join(' '),
+      advertencias: [...erroresPrevios, ...resultado.advertencias],
     }
   }
 
@@ -177,6 +251,14 @@ export class CADRouter {
         return this.anthropic
       case 'openai':
         return this.openai
+      case 'groq':
+        return this.groq
+      case 'gemini':
+        return this.gemini
+      case 'mistral':
+        return this.mistral
+      case 'openrouter':
+        return this.openrouter
       case 'ollama':
         return this.ollama
       default:
@@ -265,8 +347,18 @@ REGLAS DE EDICIÓN (CRÍTICAS):
     prompt: string,
     modeloActual: string | undefined,
     tarea: TipoTarea,
-    opciones: { ollamaModelo?: string; signal?: AbortSignal } = {}
-  ): Promise<Pick<RespuestaRouter, 'ok' | 'dxf' | 'errores' | 'modeloIA'>> {
+    opciones: {
+      ollamaModelo?: string
+      signal?: AbortSignal
+      progreso?: CallbackProgresoIA
+      abortId?: string
+    } = {}
+  ): Promise<
+    Pick<
+      RespuestaRouter,
+      'ok' | 'dxf' | 'errores' | 'modeloIA' | 'pensamiento' | 'tiempoPrimerTokenMs'
+    >
+  > {
     const systemPrompt = this.buildSystemPrompt(tarea)
     const promptCompleto = this.buildUserPrompt(prompt, modeloActual, tarea)
 
@@ -279,6 +371,8 @@ REGLAS DE EDICIÓN (CRÍTICAS):
       maxTokens: 4000,
       modelo,
       signal: opciones.signal,
+      progreso: opciones.progreso,
+      abortId: opciones.abortId,
     })
 
     const dxfExtraido = this.extraerDXF(respuesta.texto)
@@ -297,6 +391,8 @@ REGLAS DE EDICIÓN (CRÍTICAS):
       ok: true,
       dxf: dxfExtraido,
       modeloIA: respuesta.modeloUsado,
+      pensamiento: respuesta.pensamiento,
+      tiempoPrimerTokenMs: respuesta.tiempoPrimerTokenMs,
     }
   }
 

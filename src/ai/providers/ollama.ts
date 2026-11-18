@@ -1,9 +1,15 @@
-import { ProveedorIA, type RespuestaIA, type OpcionesIA } from './base'
-
 /**
  * Proveedor Ollama local (modelos gratuitos, sin costo de API)
  * Útil como fallback y para bocetos rápidos sin depender de claves de pago.
+ *
+ * Streaming NDJSON: cada línea puede traer `thinking` (modelos con razonamiento)
+ * y `response` (texto visible), además de un objeto final con `done: true` y
+ * estadísticas. Así se puede ver si el modelo está cargando, pensando o ya
+ * escribiendo el DXF.
  */
+import { ProveedorIA, type RespuestaIA, type OpcionesIA } from './base'
+import { crearEmisor, leerFlujo } from './stream'
+
 export class OllamaProvider extends ProveedorIA {
   nombre = 'ollama'
   private baseURL: string
@@ -25,6 +31,9 @@ export class OllamaProvider extends ProveedorIA {
   async generar(prompt: string, opciones: OpcionesIA = {}): Promise<RespuestaIA> {
     const modelo = opciones.modelo || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b'
     const temperatura = opciones.temperatura ?? 0.3
+    const emisor = crearEmisor(this.nombre, opciones)
+    emisor.setModelo(modelo)
+    emisor.fase('conectando', `Conectando con Ollama (${modelo}). Si el modelo está en frío puede tardar unos minutos…`)
 
     const respuesta = await fetch(`${this.baseURL}/api/generate`, {
       method: 'POST',
@@ -35,8 +44,8 @@ export class OllamaProvider extends ProveedorIA {
       body: JSON.stringify({
         model: modelo,
         prompt,
-        stream: false,
         system: opciones.systemPrompt || '',
+        stream: true,
         // Ollama espera los parámetros de muestreo dentro de `options`
         options: {
           temperature: temperatura,
@@ -49,14 +58,41 @@ export class OllamaProvider extends ProveedorIA {
 
     if (!respuesta.ok) {
       const errorTexto = await respuesta.text()
+      emisor.fase('error', errorTexto.slice(0, 200))
       throw new Error(`Ollama error ${respuesta.status}: ${errorTexto}`)
     }
 
-    const data: any = await respuesta.json()
+    let texto = ''
+    let pensamiento = ''
+    let tokens: number | undefined
 
+    await leerFlujo(
+      respuesta,
+      (dato: any) => {
+        if (dato.thinking) {
+          pensamiento += String(dato.thinking)
+          emisor.fragmento('pensando', String(dato.thinking), pensamiento)
+        }
+        if (dato.response) {
+          texto += String(dato.response)
+          emisor.fragmento('generando', String(dato.response), texto)
+        }
+        if (dato.eval_count !== undefined) {
+          tokens = (dato.prompt_eval_count || 0) + dato.eval_count
+        }
+      },
+      opciones.signal
+    )
+
+    if (!texto.trim()) throw new Error('Ollama no devolvió texto en el flujo')
+
+    emisor.fase('generando', 'Respuesta recibida', texto)
     return {
-      texto: data.response || '',
+      texto,
       modeloUsado: `ollama:${modelo}`,
+      tokens,
+      pensamiento: pensamiento || undefined,
+      tiempoPrimerTokenMs: emisor.tiempoPrimerTokenMs() || undefined,
     }
   }
 }

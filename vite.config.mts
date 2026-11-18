@@ -20,10 +20,14 @@ export default defineConfig({
     },
   },
   build: {
+    // Los módulos `three/addons/*` deben quedar empaquetados: si se marcan como
+    // externos, el bundle de producción (que se carga por file://) deja
+    // specifiers desnudos y el renderer falla con "Failed to resolve module
+    // specifier three/addons/...". El alias del stub de FXAAPass cubre el único
+    // addon ausente en la versión instalada de three.
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      external: (id) => /three\/addons\//.test(id),
       output: {
         // Code-splitting: separar three.js del bundle principal para reducir el inicial y mejorar cacheo
         manualChunks: {

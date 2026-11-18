@@ -20,6 +20,7 @@
  *
  * Main → Renderer (send/on):
  *   · ventana:pantallaCompleta       → notifica cambios de pantalla completa
+ *   · ia:progreso                    → razonamiento/texto parcial, fase y latido de la IA
  */
 
 /** Nombres canónicos de los canales IPC, agrupados por dominio. */
@@ -45,6 +46,8 @@ export const CANALES = {
   VENTANA_ESTADO: 'ventana:estaPantallaCompleta',
   /** Evento main→renderer con el estado de pantalla completa. */
   VENTANA_EVENTO: 'ventana:pantallaCompleta',
+  /** Evento main→renderer con razonamiento, fragmentos de texto y latidos. */
+  IA_PROGRESO: 'ia:progreso',
 
   /** Lee la configuración de claves de IA guardada en disco. */
   IA_OBTENER_CONFIG: 'ia:obtener-config',
@@ -87,6 +90,11 @@ export interface RespuestaGenerar {
   /** Tarea detectada por el clasificador del router. */
   tareaDetectada?: string
   costo?: number
+  /** Razonamiento intermedio del proveedor (si lo expone). */
+  pensamiento?: string
+  /** Duración total y tiempo hasta el primer token (para diagnosticar cuelgues). */
+  duracionMs?: number
+  tiempoPrimerTokenMs?: number
 }
 
 /** Respuesta de `cad:validar` (misma forma que ResultadoValidacion). */

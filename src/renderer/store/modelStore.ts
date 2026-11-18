@@ -69,6 +69,8 @@ interface ModelState {
   ollamaModelo: string
   /** Visibilidad del modal de configuración de API keys */
   modalConfigIA: boolean
+  /** Aplicar al visor automáticamente el DXF devuelto por la IA */
+  autoAplicarIA: boolean
   /** Pila de textos DXF anteriores (para deshacer ediciones del visor) */
   pilaDeshacer: string[]
 
@@ -82,6 +84,9 @@ interface ModelState {
   setProveedorIA: (proveedor: ProveedorIAId) => void
   setOllamaModelo: (modelo: string) => void
   setModalConfigIA: (abierta: boolean) => void
+  setAutoAplicarIA: (activo: boolean) => void
+  /** Aplica un DXF generado por la IA al modelo actual (o crea uno nuevo) */
+  aplicarGeneracionIA: (dxfTexto: string, nombre: string) => void
   aplicarEdicion: (dxfTexto: string, entidades?: EntidadDXF[]) => void
   deshacerEdicion: () => void
 }
@@ -97,6 +102,7 @@ export const useModelStore = create<ModelState>()(
       proveedorIA: 'auto',
       ollamaModelo: 'qwen2.5-coder:7b',
       modalConfigIA: false,
+      autoAplicarIA: true,
       pilaDeshacer: [],
 
       setModelo: (modelo) => set({ modeloActual: modelo, historial: [...get().historial, modelo] }),
@@ -154,6 +160,47 @@ export const useModelStore = create<ModelState>()(
 
       setModalConfigIA: (modalConfigIA) => set({ modalConfigIA }),
 
+      setAutoAplicarIA: (autoAplicarIA) => set({ autoAplicarIA }),
+
+      /**
+       * Aplica el resultado de la IA al "archivo destino": si hay modelo cargado
+       * lo sustituye (sumando versión y guardando el DXF previo para deshacer);
+       * si no lo hay, crea un modelo nuevo y lo añade al historial.
+       */
+      aplicarGeneracionIA: (dxfTexto, nombre) => {
+        const modelo = get().modeloActual
+        const es3d = /\b3DFACE\b|\b3DSOLID\b/i.test(dxfTexto)
+        const ahora = new Date()
+
+        if (!modelo) {
+          const nuevo: ModeloCAD = {
+            id: crypto.randomUUID(),
+            nombre,
+            tipo: es3d ? '3d' : '2d',
+            unidades: 'mm',
+            entidades: [],
+            dxfTexto,
+            ultimaModificacion: ahora,
+            version: 1,
+          }
+          set({ modeloActual: nuevo, historial: [...get().historial, nuevo] })
+          return
+        }
+
+        const actualizado: ModeloCAD = {
+          ...modelo,
+          nombre,
+          dxfTexto,
+          ultimaModificacion: ahora,
+          version: modelo.version + 1,
+        }
+        set({
+          modeloActual: actualizado,
+          historial: [...get().historial, actualizado],
+          pilaDeshacer: [...get().pilaDeshacer.slice(-14), modelo.dxfTexto],
+        })
+      },
+
       // Aplica una edición del visor: guarda el DXF anterior para deshacer
       aplicarEdicion: (dxfTexto, entidades) => {
         const modelo = get().modeloActual
@@ -192,6 +239,7 @@ export const useModelStore = create<ModelState>()(
         historial: s.historial,
         proveedorIA: s.proveedorIA,
         ollamaModelo: s.ollamaModelo,
+        autoAplicarIA: s.autoAplicarIA,
       }),
     }
   )

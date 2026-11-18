@@ -10,6 +10,7 @@
  * aquí se usan los nombres literales para mantener el runtime simple.
  */
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ProgresoIA } from '../src/ai/providers/base'
 
 export interface ConfigIAVista {
   anthropicApiKey: string
@@ -44,6 +45,8 @@ export interface CanalCAD {
   importar: () => Promise<any>
   /** Detiene la generación IA activa (id de la solicitud en curso). */
   detenerGeneracion: (id: string) => Promise<{ ok: boolean }>
+  /** Suscribe a fragmentos de razonamiento/texto y latidos de la IA. Devuelve la función para anular la suscripción. */
+  onProgresoIA: (callback: (progreso: ProgresoIA) => void) => () => void
   ventana: {
     alternarPantallaCompleta: () => Promise<boolean>
     salirPantallaCompleta: () => Promise<boolean>
@@ -72,6 +75,11 @@ contextBridge.exposeInMainWorld('apiCAD', {
   exportar: (args) => ipcRenderer.invoke('cad:exportar', args),
   importar: () => ipcRenderer.invoke('cad:importar'),
   detenerGeneracion: (id: string) => ipcRenderer.invoke('cad:detener-generacion', { id }),
+  onProgresoIA: (callback) => {
+    const escucha = (_evento: unknown, progreso: ProgresoIA) => callback(progreso)
+    ipcRenderer.on('ia:progreso', escucha)
+    return () => ipcRenderer.removeListener('ia:progreso', escucha)
+  },
   ventana: {
     alternarPantallaCompleta: () => ipcRenderer.invoke('ventana:alternarPantallaCompleta'),
     salirPantallaCompleta: () => ipcRenderer.invoke('ventana:salirPantallaCompleta'),

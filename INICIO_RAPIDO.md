@@ -58,10 +58,12 @@ npm run start      # lanzar la compilación sin empaquetar
 
 ## Flujo de uso básico
 
-1. En la **Terminal IA** escribe, por ejemplo: `placa de 100×60 mm con 4 agujeros de 8 mm en las esquinas`.
-2. El router elige el modelo (o usa el del selector). Pulsa **Aplicar al visor**.
+1. En la **Terminal IA** escribe, por ejemplo: `placa de 100×60 mm con 4 agujeros de 8 mm en las esquinas`. También puedes pedir círculos, triángulos, polígonos, líneas o pedir cambios (`añadir 2 agujeros de 6 mm`, `rotar 90 grados`, `cambiar el tamaño a 200x100 mm`).
+2. El router elige el modelo; si no hay claves ni Ollama, el **intérprete local** genera/edita el DXF y se aplica al visor automáticamente (opción «Auto-aplicar»).
 3. Retoca con las **herramientas de edición** del visor si hace falta (mover/rotar/escalar/espejar, con deshacer).
 4. **Exportar .dxf** → archivo listo para el CAM.
+
+Más ejemplos y detalle en [docs/SISTEMA_DE_CONSULTAS.md](docs/SISTEMA_DE_CONSULTAS.md).
 
 Atajos del visor: `1-4` vistas rápidas · `F` encuadrar · `R` restablecer · `G` cuadrícula · flechas desplazar · `Esc` salir de pantalla completa.
 

@@ -56,3 +56,26 @@ http.createServer((req,res)=>{
 ~~~~
 
 Durante el desarrollo, `window.__CNC` permite invocar el router y el store directamente desde la consola o `CAPTURA_UI_JS`.
+
+## Streaming y diagnóstico de "¿está pensando o colgado?"
+
+Todos los proveedores usan streaming y notifican al renderer mediante el canal
+IPC `ia:progreso` (`window.apiCAD.onProgresoIA`). Cada evento `ProgresoIA`
+contiene `fase` (`conectando` / `pensando` / `generando` / `latido` / `error` /
+`info`), `proveedor`, `modelo`, `texto`, `acumulado`, `tiempoMs` y
+`tiempoPrimerTokenMs`.
+
+- `pensando`: bloques `thinking_delta` (Anthropic), `reasoning` (OpenAI /
+  compatibles), partes con `thought: true` (Gemini) o campo `thinking` (Ollama).
+- `generando`: `text_delta` / `delta.content` / `response` con el DXF.
+- `latido`: eventos del main cada 5 s aunque el proveedor no emita tokens.
+  Si la terminal sigue mostrando latidos con el contador avanzando, la conexión
+  está viva (puede ser carga de modelo en CPU o espera de la API); si se
+  detienen, hay un cuelgue real.
+- Al terminar se registra un mensaje de sistema con duración total, proveedor y
+  tiempo hasta el primer token. El razonamiento queda plegable bajo
+  «Ver razonamiento intermedio».
+
+El emisor (`src/ai/providers/stream.ts`) limita los eventos a ~6/s para no
+saturar React y conserva solo los últimos 4000 caracteres del acumulado.
+

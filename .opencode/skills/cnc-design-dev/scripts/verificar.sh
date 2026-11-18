@@ -3,8 +3,11 @@
 # verificar.sh — Verificación estática de CNCDesign (typecheck + build)
 #
 # Comprueba que el proyecto compila antes de dar un cambio por bueno:
-#   1. tsc -p tsconfig.build.json  → main de Electron + núcleo a dist/
-#   2. vite build                  → bundle del renderer
+#   1. vite build                  → bundle del renderer (vacia dist/)
+#   2. tsc -p tsconfig.build.json  → main de Electron + núcleo a dist/
+#
+# El orden es importante: vite build tiene emptyOutDir:true, así que si se
+# ejecuta después de tsc borra dist/electron y dist/src.
 #
 # Uso:
 #   bash verificar.sh [ruta-al-repo]
@@ -24,10 +27,10 @@ cd "$RAIZ"
 [[ -f package.json ]] || { echo "✖ No hay package.json en $RAIZ (¿es un checkout de CNCDesign?)"; exit 1; }
 [[ -x node_modules/.bin/tsc ]] || { echo "✖ Falta node_modules — ejecuta 'npm install' primero"; exit 1; }
 
-echo "▶ [1/2] tsc -p tsconfig.build.json  (Electron + núcleo → dist/)"
-node_modules/.bin/tsc -p tsconfig.build.json
-
-echo "▶ [2/2] vite build                   (bundle del renderer)"
+echo "▶ [1/2] vite build                   (bundle del renderer → dist/)"
 node_modules/.bin/vite build
+
+echo "▶ [2/2] tsc -p tsconfig.build.json  (Electron + núcleo → dist/)"
+node_modules/.bin/tsc -p tsconfig.build.json
 
 echo "✔ Verificación completada sin errores"

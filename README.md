@@ -25,8 +25,8 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 ## Características principales
 
 - **Visor 3D/2D** — renderiza cualquier `.dxf` (importado o generado por IA) con Three.js y `dxf-render`. Cámara orbitable, vistas rápidas (frontal/superior/lateral/isométrica), cuadrícula, encuadre automático, selección de capas, pantalla completa y tarjeta de atajos integrada.
-- **Terminal IA** — chat en español con historial; el usuario describe el modelo y el router multi-IA elige el proveedor adecuado. La respuesta incluye un bloque `dxf` que puede **aplicarse al visor** o **exportarse** como archivo.
-- **Router multi-IA con fallback** — Anthropic (Claude), OpenAI (GPT), Groq / Gemini / Mistral / OpenRouter (gratuitos en la nube) y Ollama (local, gratuito). Clasifica la tarea (crear / editar / imagen / corregir) y cae en cascada al siguiente proveedor disponible si el principal falla.
+- **Terminal IA** — chat en español con historial; el usuario describe el modelo y el router multi-IA elige el proveedor adecuado. Muestra el **razonamiento intermedio en vivo** (streaming), un latido cada 5 s y el tiempo hasta el primer token para distinguir "está pensando" de "se colgó". El DXF resultante **se aplica al visor automáticamente** (opción «Auto-aplicar») y puede exportarse como archivo.
+- **Router multi-IA con fallback** — Anthropic (Claude), OpenAI (GPT), Groq / Gemini / Mistral / OpenRouter (gratuitos en la nube) y Ollama (local, gratuito). Clasifica la tarea (crear / editar / imagen / corregir) y cae en cascada al siguiente proveedor disponible si el principal falla. Si **no hay ningún proveedor**, un **intérprete local** (`src/cad/interpretador.ts`) genera o modifica la geometría en español: círculos, cuadrados, triángulos, polígonos, líneas, agujeros y operaciones de edición sobre el modelo destino. Ver [docs/SISTEMA_DE_CONSULTAS.md](docs/SISTEMA_DE_CONSULTAS.md).
 - **Selector de modelo** — píldora sobre el compositor de la terminal con lista de proveedores y **listado en vivo de los modelos Ollama instalados** (`/api/tags`). La elección se guarda entre sesiones.
 - **Configuración de claves API** — modal con campos mostrar/ocultar; se guardan localmente en `config-ia.json` (dentro de los datos de usuario de la app) y tienen prioridad sobre las variables de entorno.
 - **Edición manual sin IA** — mover, rotar, escalar y espejar las entidades del modelo actual con campos numéricos y presets; incluye **pila de deshacer** de 15 pasos. Todo el ciclo (texto `.dxf` → entidades → transformación → texto `.dxf`) ocurre en módulos puros y testables.
@@ -85,8 +85,8 @@ CNCDesign combina un **visor CAD 2D/3D** (Three.js + `dxf-render`) con una **ter
 1. El usuario escribe en la **Terminal IA** (ej: *"placa de 100×60 mm con 4 agujeros de 8 mm"*).
 2. El router **clasifica la tarea** (`crear` / `editar` / `imagen` / `corregir`) por palabras clave y otros indicios, salvo que el usuario haya fijado un proveedor en el selector (que entonces se intenta primero).
 3. Se ejecuta la petición contra el proveedor elegido (o contra la primera opción gratuita de la cadena para la tarea); si falla (sin clave, error de red, timeout), se **cae en cascada** al siguiente proveedor disponible (terminando en Ollama local si está activo).
-4. De la respuesta se extrae el **bloque `dxf`**; opcionalmente se **valida** con las reglas CNC (`src/cad/validator.ts`).
-5. El usuario pulsa **Aplicar al visor**: el texto DXF pasa al renderer, que lo parsea (`dxf-render`) y lo dibuja. Desde allí puede **editarse a mano** o **exportarse**.
+4. De la respuesta se extrae el **bloque `dxf`**; opcionalmente se **valida** con las reglas CNC (`src/cad/validator.ts`). Sin proveedores, lo genera el **intérprete local**, que además aplica la instrucción sobre el DXF del modelo actual.
+5. El DXF pasa al renderer, que lo parsea (`dxf-render`) y lo dibuja **automáticamente** (si «Auto-aplicar» está activo). Desde allí puede **editarse a mano**, **deshacerse** o **exportarse**.
 
 ### Módulos
 
@@ -176,7 +176,7 @@ npm run build     # → release/
 1. Abre la app (`npm run dev`).
 2. En la **Terminal IA** escribe lo que necesitas, por ejemplo:
    *"placa de 100×60 mm con 4 agujeros de 8 mm en las esquinas"*.
-3. El router elige el modelo (o usa el que fijes en el **selector**). Al terminar verás el chat con el bloque DXF y los botones **Aplicar al visor** / **Exportar .dxf**.
+3. El router elige el modelo (o usa el que fijes en el **selector**). Sin claves ni Ollama funciona igual con el intérprete local. Al terminar, el modelo aparece en el visor y puedes **Exportar .dxf** (o volver a aplicar / deshacer).
 4. Revisa el modelo en el **Visor**. Si necesitas retoques, usa las **herramientas de edición** del visor (no hace falta IA):
    - **Mover** en X/Y · **Rotar** (ángulo o presets 90°) · **Escalar** (factor) · **Espejar** (H/V) · **Deshacer** (15 pasos).
 5. **Exportar .dxf** para obtener el archivo listo para el CAM.
@@ -214,7 +214,7 @@ Al guardar desde el modal, los proveedores se recargan en caliente (`recargarPro
 | `GROQ_API_KEY` | Clave de Groq (API gratuita · nube, Llama) | *(vacío → proveedor no disponible)* |
 | `GROQ_MODEL` | Modelo Groq por defecto | `llama-3.3-70b-versatile` |
 | `GEMINI_API_KEY` | Clave de Google Gemini (API gratuita · nube) | *(vacío → proveedor no disponible)* |
-| `GEMINI_MODEL` | Modelo Gemini por defecto | `gemini-2.0-flash` |
+| `GEMINI_MODEL` | Modelo Gemini por defecto | `gemini-3.8-flash` (el 2.0 Flash fue retirado) |
 | `MISTRAL_API_KEY` | Clave de Mistral (API gratuita · nube) | *(vacío → proveedor no disponible)* |
 | `MISTRAL_MODEL` | Modelo Mistral por defecto | `mistral-small-latest` |
 | `OPENROUTER_API_KEY` | Clave de OpenRouter (API gratuita · nube) | *(vacío → proveedor no disponible)* |
